@@ -1,0 +1,128 @@
+# Render Blueprint for the Digital Connect News API.
+#
+# Commit this at the repo root and point Render at it (Dashboard → New →
+# Blueprint). Everything below is created in one go; the secrets marked
+# `sync: false` are the ones Render will prompt you for rather than store here.
+#
+# Deployed as a native Node service rather than Docker — Render detects Next.js
+# and the build is faster and simpler to debug than a container. The Dockerfile
+# in this directory is there if you'd rather pin the runtime exactly.
+
+services:
+  # ---------------------------------------------------------------------------
+  # The API
+  # ---------------------------------------------------------------------------
+  - type: web
+    name: dcn-backend
+    runtime: node
+    plan: starter # see the note on free-tier sleep in README.md
+    region: singapore # closest Render region to Bangladesh; must match Neon's
+    branch: main
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start
+
+    # Render restarts the service if this stops answering. It also checks the
+    # database, so a deploy with a bad DATABASE_URL fails the check instead of
+    # going live and erroring on first use.
+    healthCheckPath: /api/v1/health
+
+    envVars:
+      - key: NODE_ENV
+        value: production
+
+      # Render injects PORT; `npm run start` reads it.
+
+      # ----- required -----
+      - key: DATABASE_URL
+        sync: false # Neon pooled connection string
+      - key: BETTER_AUTH_SECRET
+        generateValue: true # Render generates and stores it
+      - key: BETTER_AUTH_URL
+        sync: false # https://dcn-backend.onrender.com
+      - key: CORS_ORIGINS
+        sync: false # the frontend's origin(s), comma-separated
+
+      # ----- scheduled publishing -----
+      - key: CRON_SECRET
+        generateValue: true
+
+      # ----- media -----
+      - key: UPLOADTHING_TOKEN
+        sync: false
+
+      # ----- social publishing (optional; leave blank to disable a platform) --
+      - key: FACEBOOK_APP_ID
+        sync: false
+      - key: FACEBOOK_APP_SECRET
+        sync: false
+      - key: X_CLIENT_ID
+        sync: false
+      - key: X_CLIENT_SECRET
+        sync: false
+      - key: LINKEDIN_CLIENT_ID
+        sync: false
+      - key: LINKEDIN_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: TIKTOK_CLIENT_KEY
+        sync: false
+      - key: TIKTOK_CLIENT_SECRET
+        sync: false
+
+      # ----- AI feed (optional) -----
+      - key: ANTHROPIC_API_KEY
+        sync: false
+
+      # ----- live broadcast (optional) -----
+      - key: LIVE_RELAY_URL
+        sync: false
+      - key: LIVE_RELAY_SECRET
+        sync: false
+      - key: STUDIO_TURN_URL
+        sync: false
+      - key: STUDIO_TURN_USERNAME
+        sync: false
+      - key: STUDIO_TURN_PASSWORD
+        sync: false
+
+# -----------------------------------------------------------------------------
+# Scheduled publishing
+# -----------------------------------------------------------------------------
+# Replaces the `crons` block in the monolith's vercel.json. Vercel Cron was
+# hitting /api/cron/publish-scheduled every 5 minutes; this does the same
+# against the new path.
+#
+# Unlike Vercel's Hobby plan (one run per day, which is why the original
+# README told deployers to point an external scheduler at it as well), Render
+# Cron Jobs run on the schedule you give them — so this is the only scheduler
+# needed.
+#
+# A Cron Job is a separate billable service on Render. If you'd rather not pay
+# for one, any external scheduler hitting the same URL with the same bearer
+# token works identically: GitHub Actions on a schedule, an uptime monitor, or
+# a cron entry on the relay VPS if you run one.
+#
+# $CRON_SECRET below must be set on this cron service to the same value the web
+# service generated. Copy it from the web service's Environment tab — Render
+# does not share generated values between services.
+jobs:
+  - type: cron
+    name: dcn-publish-scheduled
+    runtime: node
+    plan: starter
+    region: singapore
+    branch: main
+    schedule: "*/5 * * * *"
+    buildCommand: npm ci
+    startCommand: >
+      curl -fsS --max-time 290
+      -H "Authorization: Bearer $CRON_SECRET"
+      "$API_BASE_URL/api/v1/cron/publish-scheduled"
+    envVars:
+      - key: API_BASE_URL
+        sync: false # https://dcn-backend.onrender.com
+      - key: CRON_SECRET
+        sync: false # must match the web service's value

@@ -1,0 +1,46 @@
+{
+  "name": "dcn-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Digital Connect News \u2014 API. Route handlers only, no UI. Deployed to Render, talks to Neon Postgres.",
+  "scripts": {
+    "dev": "next dev --port 4000",
+    "build": "next build",
+    "start": "next start --port ${PORT:-4000}",
+    "lint": "eslint",
+    "typecheck": "next typegen && tsc --noEmit",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "seed": "tsx scripts/seed.ts"
+  },
+  "dependencies": {
+    "@neondatabase/serverless": "^1.1.0",
+    "better-auth": "^1.6.26",
+    "drizzle-orm": "1.0.0-rc.4",
+    "next": "16.3.5",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "uploadthing": "^7.7.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "dotenv": "^17.4.2",
+    "drizzle-kit": "1.0.0-rc.4",
+    "eslint": "10.10.0",
+    "eslint-config-next": "16.3.5",
+    "tsx": "^4.23.11",
+    "typescript": "^5"
+  },
+  "overrides": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
