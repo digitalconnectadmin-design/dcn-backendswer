@@ -4,15 +4,18 @@ The Digital Connect News API. Route handlers only — no pages, no React
 components, no UI. Deploys to Render, talks to Neon Postgres.
 
 Its counterpart is `dcn-frontend`. The migration plan for both is in
-`../PORTING.md`.
+`../PORTING.md`; when something won't connect, `TROUBLESHOOTING.md`.
 
 ---
 
 ## Running it
 
 ```bash
-cp .env.example .env     # DATABASE_URL, BETTER_AUTH_SECRET, CORS_ORIGINS at minimum
+cp .env.example .env     # DATABASE_URL, MIGRATION_DATABASE_URL,
+                         # BETTER_AUTH_SECRET, CORS_ORIGINS
 npm install
+npm run db:check         # confirm Neon is reachable before migrating
+npm run db:migrate       # fresh database only
 npm run dev              # :4000
 ```
 
@@ -30,6 +33,7 @@ That checks the database too, so it distinguishes "the service is down" from
 | `npm run dev` | dev server on :4000 |
 | `npm run build` / `start` | production |
 | `npm run typecheck` | `tsc --noEmit` |
+| `npm run db:check` | **which routes to Neon your network allows** — run this first when a migration times out |
 | `npm run db:generate` | generate a migration from schema changes |
 | `npm run db:migrate` | apply migrations |
 | `npm run db:studio` | Drizzle Studio |
@@ -223,14 +227,37 @@ with `next start`, which is what the blueprint's start command uses.
 
 ### Neon
 
-Use the **pooled** endpoint — the hostname containing `-pooler`. The HTTP
-driver opens no long-lived socket, so Render's instance count doesn't affect
-your connection budget.
+**Two connection strings, and they are not interchangeable.**
 
-The driver can't do interactive transactions, and the app uses none (verified:
-zero `db.transaction` calls). If a future change needs one, move that file to
-`drizzle-orm/node-postgres` with a `pg` Pool — Render's persistent instances
-can hold a real pool.
+| | Host | Driver | Transport |
+|---|---|---|---|
+| `DATABASE_URL` | pooled (`-pooler`) | `@neondatabase/serverless` | HTTPS :443 |
+| `MIGRATION_DATABASE_URL` | direct (no `-pooler`) | `pg` | TCP :5432 |
+
+The app wants the pooled host: many short queries, no long-held sockets, so
+Render's instance count doesn't affect your connection budget.
+
+Migrations want the direct host, for two reasons that both surface as a
+timeout rather than a useful error:
+
+- The pooler is PgBouncer in transaction mode. A migration is one long
+  transaction full of DDL — the case it handles worst.
+- The migrator wraps each migration in `db.transaction(...)`, and
+  `drizzle-orm/neon-http` cannot open a transaction at all. So `pg` is a
+  devDependency and drizzle-kit uses it over plain TCP. (drizzle-kit tries
+  `pg` → `postgres` → `@vercel/postgres` → `@neondatabase/serverless`; with
+  only the last installed it connects over a **WebSocket**, which is a
+  transport nothing else here uses and which many networks drop.)
+
+If `db:migrate` fails, run `npm run db:check` before changing anything — it
+reports which routes to Neon your network actually allows, and
+`TROUBLESHOOTING.md` says what to do with each answer. If your ISP blocks
+5432, the Neon SQL Editor or Render's own Shell both work.
+
+At runtime the app opens no transactions (verified: zero `db.transaction`
+calls), so the HTTP driver costs nothing. If a future change needs one, move
+that file to `drizzle-orm/node-postgres` — Render's persistent instances can
+hold a real pool.
 
 ### Not deployed here
 
